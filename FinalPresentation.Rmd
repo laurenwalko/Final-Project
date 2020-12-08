@@ -1,0 +1,72 @@
+---
+title: "Final Project Presentation"
+date: "December 9, 2020"
+author: "Lauren Walko"
+output: html_notebook
+---
+
+# Guiding Question
+
+Does mask wearing have an effect on the amount of positive COVID-19 cases in a State?
+
+## Project Background 
+
+The goal of my project is to determine if mask wearing has an effect on the number of positive COVID-19 cases in a state. I found three data sets to use. I have found the states with the highest number of cases, and I am going to use that to compare to the mask wearing frequency in those states. 
+
+## Biggest Challenge
+
+The biggest challenge with my project has been matching the zip codes in the mask data  to determine what state they are from.
+I have overcome it by finding a data set to use that I can match the zip codes with.
+
+## Load packages
+
+```{r}
+library(DataComputing)
+library(tidyverse)
+library(mosaic)
+library(lubridate)
+```
+
+## Load the Data
+
+This data set was a survery done by the New York Times regarding mask wearing in an area. 
+
+```{r}
+masks <- read.csv("/home/ltw5073/Final Project/masks.csv")
+head(masks)
+```
+
+```{r}
+cases <- read.csv("/home/ltw5073/Final Project/cases.csv")
+head(cases)
+```
+
+```{r}
+data("ZipGeography")
+head(ZipGeography)
+```
+
+```{r}
+caseperstate <-
+  cases %>%
+  group_by(state) %>%
+  summarise(total = sum(daily.increase))
+```
+
+```{r}
+caseperstate %>%
+  arrange(desc(total))
+```
+
+## Bar plot of states with more than 400,000 cases
+
+```{r}
+caseperstate %>%
+  filter(total > 400000) %>%
+  ggplot(aes(x=state, y=total)) +
+  geom_bar(stat = 'identity',position='dodge',width=.9)
+```
+
+## Final Thoughts
+
+My motivation for this project is to show whether the use of masks has helped a state have less positive cases. It has been an issue that some states wear masks, while others do not, so I want to determine if the states that have consisently worn them have less cases. 
