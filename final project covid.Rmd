@@ -1,0 +1,212 @@
+---
+title: "Final Project"
+author: "Lauren Walko"
+date: "November 13, 2020"
+output: html_notebook
+---
+
+
+# Guiding Question
+
+## Does mask wearing have an effect on the amount of positive COVID-19 cases in a State?
+
+
+
+### Load packages
+```{r}
+library(DataComputing)
+library(tidyverse)
+library(mosaic)
+library(ggplot2)
+```
+
+### Load and inspect the data
+
+#### Mask data
+This data came from a survey regarding mask wearing in an area. This data will be used to determine the average responses for each state. 
+```{r}
+masks <- read.csv("/home/ltw5073/Final Project/masks.csv")
+head(masks)
+```
+
+#### Cases data
+This data comes shows the increase in cases each day for each state.
+```{r}
+cases <- read.csv("/home/ltw5073/Final Project/cases.csv")
+head(cases)
+```
+
+#### County Fips data 
+This data set will be used to match the zip codes with each state to help determine how each state responded.
+```{r}
+fips <- read.csv("/home/ltw5073/Final Project/countyfips.csv")
+glimpse(fips)
+```
+
+#### ZipGeography data
+This data set is used to find population for each state.
+```{r}
+data("ZipGeography")
+nrow(ZipGeography)
+```
+
+#### States data
+I will need this later in my project to join the data sets together with one being abbreviations and the other being the full state name.
+```{r}
+stabr <- read.csv("/home/ltw5073/Final Project/States.csv")
+str(stabr)
+```
+
+
+### Match the fip codes in the mask data to zip codes in the county fips data
+
+```{r}
+ZipCodes <- 
+  masks %>%
+  select(COUNTYFP, NEVER, RARELY, SOMETIMES, FREQUENTLY, ALWAYS) %>%
+  left_join(fips %>% select(ZIP, STATE, STCOUNTYFP),
+            by = c("COUNTYFP" = "STCOUNTYFP"))
+```
+
+
+### Sort the mask data by state and find the average for each response for each state
+
+```{r}
+ZipCodes$STATE <- forcats::fct_explicit_na(ZipCodes$STATE) #Removes missing data from dataset
+States <-
+  ZipCodes %>%
+  group_by(STATE) %>%
+  summarise(Never = mean(NEVER), 
+            Rarely = mean(RARELY), 
+            Sometimes = mean(SOMETIMES),
+            Frequently = mean(FREQUENTLY),
+            Always = mean(ALWAYS))
+```
+
+### Match the state abbreviation with full name of state for later joining 
+
+```{r}
+States <- 
+  States %>%
+  select(Never, Rarely, Sometimes, Frequently, Always, STATE) %>%
+  left_join(stabr %>% select(State, Abbreviation),
+            by = c("STATE" = "Abbreviation"))
+```
+
+#### Show the mask wearing frequencies in descending order by "Never" response
+
+```{r}
+States %>%
+  arrange(desc(Never))
+```
+
+### Determine the cumulative amount of cases that each state has had
+
+```{r}
+caseperstate <-
+  cases %>%
+  group_by(state) %>%
+  summarise(cases = sum(daily.increase))
+```
+
+#### Arrange the cumulative cases in descending order
+
+```{r}
+caseperstate %>%
+  arrange(desc(cases))
+```
+
+#### Create a bar graph with states that have more than 400,000 cases. 
+
+```{r}
+caseperstate %>%
+  filter(cases > 400000) %>%
+  ggplot(aes(x=state, y=cases)) +
+  geom_bar(stat = 'identity',position='dodge',width=.9)
+```
+
+This graph shows that California, Florida, Georgia, Illinois, Michigan, New York, Ohio, Pennsylvania, Texas, and Wisconsin have the highest cumulative amount of cases. However, population is an important factor, so I am going to look at the population for each of the states.
+
+### Determine population per state and determine the percent of positive cases per state 
+
+#### Find state population
+
+```{r}
+ZipGeography$State <- forcats::fct_explicit_na(ZipGeography$State) #Removes missing data from dataset
+Population <-
+  ZipGeography %>%
+  group_by(State) %>%
+  summarise(Pop = sum(Population, na.rm=TRUE))
+
+Population %>%
+  arrange(desc(Pop))
+```
+
+I am not surprised by what I have found, as the states with the highest population are what was found to have the highest cumulative number of cases.
+
+### Find percent positive for each state
+
+A more effective way to look at the data to compare with the mask wearing data set is to find the percent positive per state.
+
+```{r}
+PercentPositive <-
+  Population %>%
+  select(State, Pop) %>%
+  left_join(caseperstate %>% select(state, cases),
+            by = c("State" = "state")) %>%
+  mutate(PositivePercent = (cases / Pop)*100)
+```
+
+#### Arrange the percent positive for each state in descending order
+
+```{r}
+PercentPositive %>%
+  arrange(desc(PositivePercent))
+```
+
+#### Plot the positive percents with states that have a positive percent above 8.00%
+
+```{r}
+PercentPositive %>%
+  filter(PositivePercent > 8) %>%
+  ggplot(aes(x=State,y=PositivePercent)) +
+  geom_bar(stat = 'identity',position='dodge',width=.9)
+```
+
+### Plot the percent positive cases versus the Never result from survey
+
+```{r}
+Covid <-
+  PercentPositive %>%
+  select(State, PositivePercent) %>%
+  left_join(States %>% select(Never, State),
+            by = c("State" = "State"))
+```
+
+```{r}
+Covid %>%
+  filter(Never > 0.05) %>%
+  ggplot(aes(x=PositivePercent, y=Never, fill=State)) +
+  geom_bar(stat = 'identity', position = 'dodge', width = .2)
+```
+
+This graph shows an interesting pattern because it appears a high positive percent has a higher "Never" response, but I want to look at the linear regression of the data to make my final determinations. 
+
+### Find the correlation between positive percent and the "Never" response 
+
+```{r}
+Covid %>%
+  ggplot(aes(x=PositivePercent, y=Never)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = FALSE)
+```
+### Find r^2 value
+
+```{r}
+fit1 <- lm(Covid$PositivePercent ~ Covid$Never)
+summary(fit1)
+```
+
+## Conclusion 
+
+This graph shows that there is a positive relationship between states that were more likely to respond to never wearing a mask and states with a high positive percent. With a r^2 value of 0.4253, there is a semi-strong, positive correlation between the positive percentage in a state and them responding that they never wear a mask. Although, correlation does not equal causation, and while the data shows masks work, other factors are important in stopping the spread of COVID-19.
